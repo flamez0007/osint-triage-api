@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSINT Triage & Identity Verification Engine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #printable-dossier, #printable-dossier * { visibility: visible; }
+      #printable-dossier { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col font-sans">
+
+  <!-- Top Navigation & Cloud Status -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex flex-wrap justify-between items-center gap-4 sticky top-0 z-30">
+    <div class="flex items-center space-x-3">
+      <div class="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
+      <span class="font-mono text-sm tracking-widest uppercase font-semibold text-emerald-400">AGENCY OSINT TRIAGE</span>
+      <span class="text-xs text-slate-500 border border-slate-700 px-2 py-0.5 rounded">v2.1 Cloud</span>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <label class="text-xs text-slate-400 font-mono">BACKEND API:</label>
+      <input id="api-url-input" type="text" value="https://osint-triage-api-1.onrender.com" 
+             class="bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs font-mono text-emerald-300 w-72 focus:outline-none focus:border-emerald-500">
+      <button onclick="pingCloudBackend()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 rounded border border-slate-700 font-mono transition">
+        Ping
+      </button>
+      <span id="api-ping-status" class="text-xs font-mono text-slate-400">Idle</span>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Column: Input Form (lg: 4 cols) -->
+    <section class="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4 shadow-xl">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-300 border-b border-slate-800 pb-2">Target Identification Intake</h2>
+
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">FULL NAME / KNOWN ALIAS</label>
+        <input id="target-name" type="text" placeholder="e.g. John Doe or Samuel Vance" 
+               class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">PHONE NUMBER (WITH COUNTRY CODE)</label>
+        <input id="target-phone" type="text" placeholder="+2348031234567 or +14155552671" 
+               class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">PRIMARY / TARGET EMAIL (FOR HOLEHE)</label>
+        <input id="target-email" type="email" placeholder="target.email@domain.com" 
+               class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">CLAIMED LOCATION</label>
+        <input id="target-location" type="text" placeholder="e.g. Port Harcourt, Nigeria" 
+               class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
+      </div>
+
+      <div>
+        <label class="block text-xs font-mono text-slate-400 mb-1">INVESTIGATION CASE NOTES</label>
+        <textarea id="case-notes" rows="3" placeholder="Case context, reported scam pattern, or transaction amount..." 
+                  class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-300 focus:border-emerald-500 focus:outline-none"></textarea>
+      </div>
+
+      <button id="btn-run-scan" onclick="executeFullTelemetryScan()" 
+              class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-slate-950 font-bold rounded-lg font-mono text-sm tracking-wide transition shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2">
+        <span>RUN CLOUD TELEMETRY SCAN</span>
+      </button>
+
+      <!-- Quick Preset Testing for Interns -->
+      <div class="border-t border-slate-800 pt-3">
+        <span class="text-[11px] font-mono text-slate-500 block mb-2 uppercase">Quick Demo Scenarios:</span>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="loadScenario('nigerian-legit')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 p-1.5 rounded text-slate-300 text-left">
+            🇳🇬 NG Verified (MTN)
+          </button>
+          <button onclick="loadScenario('us-burner')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 p-1.5 rounded text-amber-300 text-left">
+            🇺🇸 US VoIP Impersonator
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Tabs & Analysis Telemetry (lg: 8 cols) -->
+    <section class="lg:col-span-8 flex flex-col gap-4">
+      
+      <!-- Nav Tabs -->
+      <div class="flex border-b border-slate-800 gap-2">
+        <button id="tab-btn-telemetry" onclick="switchTab('telemetry')" class="px-4 py-2 text-xs font-mono font-semibold border-b-2 border-emerald-500 text-emerald-400">TELEMETRY & CARRIER</button>
+        <button id="tab-btn-footprints" onclick="switchTab('footprints')" class="px-4 py-2 text-xs font-mono font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">DIGITAL FOOTPRINTS (HOLEHE)</button>
+        <button id="tab-btn-pivots" onclick="switchTab('pivots')" class="px-4 py-2 text-xs font-mono font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">OSINT PIVOTS & TOOLS</button>
+        <button id="tab-btn-dossier" onclick="switchTab('dossier')" class="px-4 py-2 text-xs font-mono font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">CASE DOSSIER</button>
+      </div>
+
+      <!-- TAB 1: TELEMETRY & CARRIER -->
+      <div id="tab-telemetry" class="space-y-4">
+        <!-- Metric Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+            <span class="text-[11px] font-mono text-slate-500 block uppercase">Detected Carrier</span>
+            <div id="card-carrier" class="text-base font-bold text-slate-200 font-mono mt-1">--</div>
+            <span id="card-region" class="text-[10px] text-slate-400 font-mono">Region: pending</span>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+            <span class="text-[11px] font-mono text-slate-500 block uppercase">Line Category</span>
+            <div id="card-linetype" class="text-base font-bold text-slate-200 font-mono mt-1">--</div>
+            <span id="card-voip-flag" class="text-[10px] text-slate-400 font-mono">VoIP check: clean</span>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
+            <span class="text-[11px] font-mono text-slate-500 block uppercase">Anomaly Risk Rating</span>
+            <div id="card-risk" class="text-base font-bold text-emerald-400 font-mono mt-1">0% (LOW)</div>
+            <span id="card-risk-desc" class="text-[10px] text-slate-400 font-mono">Awaiting intake run</span>
+          </div>
+        </div>
+
+        <!-- Anomaly Cross-Reference Box -->
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <h3 class="text-xs font-mono uppercase text-slate-400 font-semibold mb-2">Cross-Reference Verification Signals</h3>
+          <div id="signals-log" class="space-y-2 text-xs font-mono text-slate-400">
+            <div class="p-2 bg-slate-950 rounded border border-slate-800">Ready for inquiry. Enter phone number and run scan.</div>
+          </div>
+        </div>
+
+        <!-- Live Messaging Links -->
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <h3 class="text-xs font-mono uppercase text-slate-400 font-semibold mb-3">Live Telecom & Direct Messaging Queries</h3>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <a id="link-whatsapp" href="#" target="_blank" class="px-3 py-1.5 bg-emerald-950 border border-emerald-800 text-emerald-300 rounded hover:bg-emerald-900 transition font-mono">Open WhatsApp (wa.me)</a>
+            <a id="link-telegram" href="#" target="_blank" class="px-3 py-1.5 bg-sky-950 border border-sky-800 text-sky-300 rounded hover:bg-sky-900 transition font-mono">Open Telegram (t.me)</a>
+            <a id="link-truecaller" href="#" target="_blank" class="px-3 py-1.5 bg-blue-950 border border-blue-800 text-blue-300 rounded hover:bg-blue-900 transition font-mono">Truecaller Lookup</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: DIGITAL FOOTPRINTS (HOLEHE) -->
+      <div id="tab-footprints" class="hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <div class="flex justify-between items-center mb-3">
+            <div>
+              <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold">Account Registration Scanner (Holehe Core)</h3>
+              <p class="text-[11px] text-slate-500">Probes password recovery & registration endpoints headlessly via Render container.</p>
+            </div>
+            <span id="footprint-count-tag" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">0 Platforms</span>
+          </div>
+
+          <div id="holehe-results-box" class="space-y-2 max-h-80 overflow-y-auto">
+            <div class="text-xs font-mono text-slate-500 py-6 text-center">Run a scan with an email or generated candidate handle to see registered platforms.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: OSINT PIVOTS & TOOLS -->
+      <div id="tab-pivots" class="hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Visual & Facial Recognition Launchers</h3>
+          <p class="text-xs text-slate-400 mb-3">Pivot avatar images or suspect portraits into public facial index networks:</p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <a href="https://pimeyes.com" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-slate-200 block">PimEyes (Face Index)</a>
+            <a href="https://facecheck.id" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-slate-200 block">FaceCheck.ID (Social)</a>
+            <a href="https://images.google.com" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-slate-200 block">Google Lens</a>
+            <a href="https://tineye.com" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-slate-200 block">TinEye Reverse</a>
+            <a href="https://yandex.com/images" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-slate-200 block">Yandex Visual</a>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Sherlock / WhatsMyName Profile Direct Links</h3>
+          <div class="flex gap-2 mb-3">
+            <input id="handle-search-input" type="text" placeholder="Enter discovered username handle..." 
+                   class="bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 flex-1 focus:outline-none focus:border-emerald-500">
+            <button onclick="refreshSocialLinks()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded border border-slate-700 font-mono">
+              Build Links
+            </button>
+          </div>
+          <div id="social-links-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+            <!-- Dynamic profile links appear here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: DOSSIER EXPORT -->
+      <div id="tab-dossier" class="hidden space-y-4">
+        <div class="flex justify-end gap-2">
+          <button onclick="copyDossierText()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded border border-slate-700 font-mono">Copy Text</button>
+          <button onclick="window.print()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold px-3 py-1.5 rounded font-mono">Print / Save PDF</button>
+        </div>
+
+        <div id="printable-dossier" class="bg-slate-900 border border-slate-800 rounded-lg p-6 font-mono text-xs text-slate-300 space-y-4">
+          <div class="border-b border-slate-800 pb-3 flex justify-between">
+            <div>
+              <div class="font-bold text-sm text-emerald-400">CONFIDENTIAL OSINT TRIAGE DOSSIER</div>
+              <div class="text-[10px] text-slate-500">AGENCY INVESTIGATION VERIFICATION REPORT</div>
+            </div>
+            <div class="text-right text-[10px] text-slate-500" id="dossier-timestamp">--</div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <span class="text-slate-500 block">SUBJECT:</span>
+              <span id="dossier-subject" class="text-slate-100 font-bold">--</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">TELECOM MSISDN:</span>
+              <span id="dossier-phone" class="text-slate-100">--</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">CARRIER / EXCHANGE:</span>
+              <span id="dossier-carrier" class="text-slate-100">--</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">LOCATION CLAIMED:</span>
+              <span id="dossier-location" class="text-slate-100">--</span>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-800 pt-3">
+            <span class="text-slate-500 block mb-1">DIGITAL FOOTPRINTS IDENTIFIED:</span>
+            <div id="dossier-footprints" class="text-slate-200">No platforms scanned yet.</div>
+          </div>
+
+          <div class="border-t border-slate-800 pt-3">
+            <span class="text-slate-500 block mb-1">INVESTIGATOR NOTES:</span>
+            <div id="dossier-notes" class="text-slate-400 italic">None provided.</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Script: Client-Side Logic & Render API Integration -->
+  <script>
+    // Tab Switching
+    function switchTab(name) {
+      ['telemetry', 'footprints', 'pivots', 'dossier'].forEach(tab => {
+        document.getElementById(`tab-${tab}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-btn-${tab}`);
+        btn.classList.remove('border-emerald-500', 'text-emerald-400');
+        btn.classList.add('border-transparent', 'text-slate-400');
+      });
+      document.getElementById(`tab-${name}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${name}`);
+      activeBtn.classList.remove('border-transparent', 'text-slate-400');
+      activeBtn.classList.add('border-emerald-500', 'text-emerald-400');
+    }
+
+    // Ping the Render Backend
+    async function pingCloudBackend() {
+      const baseUrl = document.getElementById('api-url-input').value.replace(/\/+$/, '');
+      const statusLabel = document.getElementById('api-ping-status');
+      statusLabel.textContent = 'Pinging...';
+      statusLabel.className = 'text-xs font-mono text-amber-400';
+
+      try {
+        const res = await fetch(`${baseUrl}/`, { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json();
+          statusLabel.textContent = `Online (${data.service})`;
+          statusLabel.className = 'text-xs font-mono text-emerald-400';
+        } else {
+          statusLabel.textContent = `Error ${res.status}`;
+          statusLabel.className = 'text-xs font-mono text-rose-400';
+        }
+      } catch (err) {
+        statusLabel.textContent = 'Cold Start / Offline';
+        statusLabel.className = 'text-xs font-mono text-rose-400';
+      }
+    }
+
+    // Main Scan Trigger
+    async function executeFullTelemetryScan() {
+      const btn = document.getElementById('btn-run-scan');
+      const baseUrl = document.getElementById('api-url-input').value.replace(/\/+$/, '');
+      const phone = document.getElementById('target-phone').value.trim();
+      const email = document.getElementById('target-email').value.trim();
+      const name = document.getElementById('target-name').value.trim();
+      const location = document.getElementById('target-location').value.trim();
+
+      if (!phone) {
+        alert('Please enter a target phone number.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-pulse">QUERYING CLOUD BACKEND...</span>`;
+
+      // 1. Telecom & Carrier API Query
+      try {
+        const phoneRes = await fetch(`${baseUrl}/api/lookup/phone?phone=${encodeURIComponent(phone)}`);
+        if (phoneRes.ok) {
+          const phoneData = await phoneRes.json();
+          renderTelemetry(phoneData, location);
+        }
+      } catch (e) {
+        console.error("Phone lookup failed:", e);
+      }
+
+      // 2. Holehe Account Scan API Query
+      if (email) {
+        try {
+          const emailRes = await fetch(`${baseUrl}/api/scan/email?email=${encodeURIComponent(email)}`);
+          if (emailRes.ok) {
+            const emailData = await emailRes.json();
+            renderHoleheResults(emailData);
+          }
+        } catch (e) {
+          console.error("Email scan failed:", e);
+        }
+      }
+
+      // Update deep-links
+      updateMessagingLinks(phone);
+      updateDossier();
+
+      btn.disabled = false;
+      btn.textContent = 'RUN CLOUD TELEMETRY SCAN';
+    }
+
+    function renderTelemetry(data, claimedLoc) {
+      document.getElementById('card-carrier').textContent = data.carrier;
+      document.getElementById('card-region').textContent = `Region: ${data.region}`;
+      document.getElementById('card-linetype').textContent = data.line_type.toUpperCase();
+      
+      const voipCard = document.getElementById('card-voip-flag');
+      const riskCard = document.getElementById('card-risk');
+      const riskDesc = document.getElementById('card-risk-desc');
+      const signalsLog = document.getElementById('signals-log');
+      
+      let risk = 10;
+      let logs = [];
+
+      if (data.is_voip) {
+        voipCard.textContent = 'WARNING: VIRTUAL VOIP DETECTED';
+        voipCard.className = 'text-[10px] text-rose-400 font-mono font-bold';
+        risk += 50;
+        logs.push(`<div class="p-2 bg-rose-950/40 border border-rose-900 rounded text-rose-300">🚨 HIGH RISK: Disposable / VoIP carrier detected (${data.carrier}). Common burner profile.</div>`);
+      } else {
+        voipCard.textContent = 'Physical SIM Exchange';
+        voipCard.className = 'text-[10px] text-emerald-400 font-mono';
+        logs.push(`<div class="p-2 bg-emerald-950/40 border border-emerald-900 rounded text-emerald-300">✓ Legitimate cellular routing on ${data.carrier}.</div>`);
+      }
+
+      if (claimedLoc) {
+        logs.push(`<div class="p-2 bg-slate-950 border border-slate-800 rounded">Claimed location recorded as: "${claimedLoc}". Cross-reference against carrier zone (${data.region}).</div>`);
+      }
+
+      riskCard.textContent = `${risk}% (${risk > 40 ? 'HIGH' : 'LOW'})`;
+      riskCard.className = `text-base font-bold font-mono mt-1 ${risk > 40 ? 'text-rose-400' : 'text-emerald-400'}`;
+      riskDesc.textContent = risk > 40 ? 'Anomalies identified' : 'Signals consistent';
+      signalsLog.innerHTML = logs.join('');
+    }
+
+    function renderHoleheResults(data) {
+      const box = document.getElementById('holehe-results-box');
+      const countTag = document.getElementById('footprint-count-tag');
+      
+      if (!data.registered_platforms || data.registered_platforms.length === 0) {
+        box.innerHTML = `<div class="text-xs font-mono text-slate-400 p-3 bg-slate-950 rounded">No platforms flagged or registered to ${data.target}.</div>`;
+        countTag.textContent = '0 Platforms';
+        return;
+      }
+
+      countTag.textContent = `${data.count} Platforms`;
+      box.innerHTML = data.registered_platforms.map(platform => `
+        <div class="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded text-xs font-mono">
+          <span class="text-slate-200 font-semibold">${platform}</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px]">ACTIVE / REGISTERED</span>
+        </div>
+      `).join('');
+    }
+
+    function updateMessagingLinks(phone) {
+      const digits = phone.replace(/\D/g, '');
+      document.getElementById('link-whatsapp').href = `https://wa.me/${digits}`;
+      document.getElementById('link-telegram').href = `https://t.me/+${digits}`;
+      document.getElementById('link-truecaller').href = `https://www.truecaller.com/search/none/${digits}`;
+    }
+
+    function refreshSocialLinks() {
+      const handle = document.getElementById('handle-search-input').value.trim();
+      if (!handle) return;
+      const grid = document.getElementById('social-links-grid');
+      const platforms = [
+        { name: 'Twitter / X', url: `https://x.com/${handle}` },
+        { name: 'Instagram', url: `https://instagram.com/${handle}` },
+        { name: 'GitHub', url: `https://github.com/${handle}` },
+        { name: 'TikTok', url: `https://tiktok.com/@${handle}` },
+        { name: 'LinkedIn', url: `https://linkedin.com/in/${handle}` },
+        { name: 'Reddit', url: `https://reddit.com/user/${handle}` }
+      ];
+
+      grid.innerHTML = platforms.map(p => `
+        <a href="${p.url}" target="_blank" class="p-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center block text-slate-300 hover:text-emerald-400 transition">
+          ${p.name}
+        </a>
+      `).join('');
+    }
+
+    function updateDossier() {
+      document.getElementById('dossier-timestamp').textContent = new Date().toUTCString();
+      document.getElementById('dossier-subject').textContent = document.getElementById('target-name').value || 'Unknown Subject';
+      document.getElementById('dossier-phone').textContent = document.getElementById('target-phone').value || '--';
+      document.getElementById('dossier-carrier').textContent = document.getElementById('card-carrier').textContent;
+      document.getElementById('dossier-location').textContent = document.getElementById('target-location').value || 'Unspecified';
+      document.getElementById('dossier-notes').textContent = document.getElementById('case-notes').value || 'None logged.';
+      
+      const count = document.getElementById('footprint-count-tag').textContent;
+      document.getElementById('dossier-footprints').textContent = `Total confirmed accounts: ${count}`;
+    }
+
+    function copyDossierText() {
+      const text = document.getElementById('printable-dossier').innerText;
+      navigator.clipboard.writeText(text);
+      alert('Dossier copied to clipboard.');
+    }
+
+    function loadScenario(type) {
+      if (type === 'nigerian-legit') {
+        document.getElementById('target-name').value = 'Adeyemi Okafor';
+        document.getElementById('target-phone').value = '+2348035550192';
+        document.getElementById('target-email').value = 'adeyemi.o@gmail.com';
+        document.getElementById('target-location').value = 'Port Harcourt, Rivers';
+        document.getElementById('case-notes').value = 'Local client verification inquiry.';
+      } else {
+        document.getElementById('target-name').value = 'David Sterling';
+        document.getElementById('target-phone').value = '+18005550199';
+        document.getElementById('target-email').value = 'sterling.crypto@tempmail.com';
+        document.getElementById('target-location').value = 'Lagos, Nigeria';
+        document.getElementById('case-notes').value = 'Reported investment impersonation lead.';
+      }
+    }
+  </script>
+</body>
+</html>
