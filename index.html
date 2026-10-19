@@ -12,6 +12,237 @@
       #printable-dossier { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
     }
   </style>
+
+  <script>
+    // Tab Switching
+    function switchTab(name) {
+      ['telemetry', 'footprints', 'pivots', 'dossier'].forEach(tab => {
+        const el = document.getElementById(`tab-${tab}`);
+        const btn = document.getElementById(`tab-btn-${tab}`);
+        if (el) el.classList.add('hidden');
+        if (btn) {
+          btn.classList.remove('border-emerald-500', 'text-emerald-400');
+          btn.classList.add('border-transparent', 'text-slate-400');
+        }
+      });
+      const activeEl = document.getElementById(`tab-${name}`);
+      const activeBtn = document.getElementById(`tab-btn-${name}`);
+      if (activeEl) activeEl.classList.remove('hidden');
+      if (activeBtn) {
+        activeBtn.classList.remove('border-transparent', 'text-slate-400');
+        activeBtn.classList.add('border-emerald-500', 'text-emerald-400');
+      }
+    }
+
+    // Ping Function with Visual State & Auto-Timeout
+    async function pingCloudBackend() {
+      const inputEl = document.getElementById('api-url-input');
+      const statusLabel = document.getElementById('api-ping-status');
+      const baseUrl = inputEl.value.trim().replace(/\/+$/, '');
+
+      statusLabel.textContent = 'Contacting server...';
+      statusLabel.className = 'text-xs font-mono text-amber-400 animate-pulse';
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s for Render cold start
+
+        const res = await fetch(`${baseUrl}/`, { 
+          method: 'GET',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          statusLabel.textContent = `Online (${data.service || 'Ready'})`;
+          statusLabel.className = 'text-xs font-mono text-emerald-400 font-bold';
+        } else {
+          statusLabel.textContent = `HTTP ${res.status}`;
+          statusLabel.className = 'text-xs font-mono text-rose-400';
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          statusLabel.textContent = 'Server wake-up timeout. Click ping again.';
+        } else {
+          statusLabel.textContent = 'Connection failed (Check URL)';
+        }
+        statusLabel.className = 'text-xs font-mono text-rose-400';
+        console.error('Ping error:', err);
+      }
+    }
+
+    // Main Scan
+    async function executeFullTelemetryScan() {
+      const btn = document.getElementById('btn-run-scan');
+      const baseUrl = document.getElementById('api-url-input').value.trim().replace(/\/+$/, '');
+      const phone = document.getElementById('target-phone').value.trim();
+      const email = document.getElementById('target-email').value.trim();
+      const location = document.getElementById('target-location').value.trim();
+
+      if (!phone) {
+        alert('Please enter a target phone number.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-pulse">QUERYING CLOUD BACKEND...</span>`;
+
+      // 1. Telecom & Carrier API Query
+      try {
+        const phoneRes = await fetch(`${baseUrl}/api/lookup/phone?phone=${encodeURIComponent(phone)}`);
+        if (phoneRes.ok) {
+          const phoneData = await phoneRes.json();
+          renderTelemetry(phoneData, location);
+        }
+      } catch (e) {
+        console.error("Phone lookup failed:", e);
+      }
+
+      // 2. Holehe Account Scan API Query
+      if (email) {
+        try {
+          const emailRes = await fetch(`${baseUrl}/api/scan/email?email=${encodeURIComponent(email)}`);
+          if (emailRes.ok) {
+            const emailData = await emailRes.json();
+            renderHoleheResults(emailData);
+          }
+        } catch (e) {
+          console.error("Email scan failed:", e);
+        }
+      }
+
+      updateMessagingLinks(phone);
+      updateDossier();
+
+      btn.disabled = false;
+      btn.textContent = 'RUN CLOUD TELEMETRY SCAN';
+    }
+
+    function renderTelemetry(data, claimedLoc) {
+      document.getElementById('card-carrier').textContent = data.carrier || 'Unknown';
+      document.getElementById('card-region').textContent = `Region: ${data.region || 'International'}`;
+      document.getElementById('card-linetype').textContent = (data.line_type || 'UNKNOWN').toUpperCase();
+      
+      const voipCard = document.getElementById('card-voip-flag');
+      const riskCard = document.getElementById('card-risk');
+      const riskDesc = document.getElementById('card-risk-desc');
+      const signalsLog = document.getElementById('signals-log');
+      
+      let risk = 10;
+      let logs = [];
+
+      if (data.is_voip) {
+        voipCard.textContent = 'WARNING: VIRTUAL VOIP DETECTED';
+        voipCard.className = 'text-[10px] text-rose-400 font-mono font-bold';
+        risk += 50;
+        logs.push(`<div class="p-2 bg-rose-950/40 border border-rose-900 rounded text-rose-300">🚨 HIGH RISK: Virtual / VoIP routing identified (${data.carrier}). Frequently correlated with burner profiles.</div>`);
+      } else {
+        voipCard.textContent = data.line_type === 'landline' ? 'Geographic Landline' : 'Physical Cellular Exchange';
+        voipCard.className = 'text-[10px] text-emerald-400 font-mono';
+        logs.push(`<div class="p-2 bg-emerald-950/40 border border-emerald-900 rounded text-emerald-300">✓ Standard routing confirmed via ${data.carrier}.</div>`);
+      }
+
+      if (data.details) {
+        logs.push(`<div class="p-2 bg-amber-950/40 border border-amber-900 rounded text-amber-300">⚠️ SPECIFIC MARKER: ${data.details}</div>`);
+      }
+
+      if (claimedLoc) {
+        logs.push(`<div class="p-2 bg-slate-950 border border-slate-800 rounded">Claimed location recorded as: "${claimedLoc}". Cross-reference against detected jurisdiction (${data.region}).</div>`);
+      }
+
+      riskCard.textContent = `${risk}% (${risk > 40 ? 'HIGH' : 'LOW'})`;
+      riskCard.className = `text-base font-bold font-mono mt-1 ${risk > 40 ? 'text-rose-400' : 'text-emerald-400'}`;
+      riskDesc.textContent = risk > 40 ? 'Anomalies identified' : 'Signals consistent';
+      signalsLog.innerHTML = logs.join('');
+    }
+
+    function renderHoleheResults(data) {
+      const box = document.getElementById('holehe-results-box');
+      const countTag = document.getElementById('footprint-count-tag');
+      
+      if (!data.registered_platforms || data.registered_platforms.length === 0) {
+        box.innerHTML = `<div class="text-xs font-mono text-slate-400 p-3 bg-slate-950 rounded">No platforms flagged or registered to ${data.target}.</div>`;
+        countTag.textContent = '0 Platforms';
+        return;
+      }
+
+      countTag.textContent = `${data.count} Platforms`;
+      box.innerHTML = data.registered_platforms.map(platform => `
+        <div class="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded text-xs font-mono">
+          <span class="text-slate-200 font-semibold">${platform}</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px]">ACTIVE / REGISTERED</span>
+        </div>
+      `).join('');
+    }
+
+    function updateMessagingLinks(phone) {
+      const digits = phone.replace(/\D/g, '');
+      document.getElementById('link-whatsapp').href = `https://wa.me/${digits}`;
+      document.getElementById('link-telegram').href = `https://t.me/+${digits}`;
+      document.getElementById('link-truecaller').href = `https://www.truecaller.com/search/none/${digits}`;
+    }
+
+    function refreshSocialLinks() {
+      const handle = document.getElementById('handle-search-input').value.trim();
+      if (!handle) return;
+      const grid = document.getElementById('social-links-grid');
+      const platforms = [
+        { name: 'Twitter / X', url: `https://x.com/${handle}` },
+        { name: 'Instagram', url: `https://instagram.com/${handle}` },
+        { name: 'GitHub', url: `https://github.com/${handle}` },
+        { name: 'TikTok', url: `https://tiktok.com/@${handle}` },
+        { name: 'LinkedIn', url: `https://linkedin.com/in/${handle}` },
+        { name: 'Reddit', url: `https://reddit.com/user/${handle}` }
+      ];
+
+      grid.innerHTML = platforms.map(p => `
+        <a href="${p.url}" target="_blank" class="p-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center block text-slate-300 hover:text-emerald-400 transition">
+          ${p.name}
+        </a>
+      `).join('');
+    }
+
+    function updateDossier() {
+      document.getElementById('dossier-timestamp').textContent = new Date().toUTCString();
+      document.getElementById('dossier-subject').textContent = document.getElementById('target-name').value || 'Unknown Subject';
+      document.getElementById('dossier-phone').textContent = document.getElementById('target-phone').value || '--';
+      document.getElementById('dossier-carrier').textContent = document.getElementById('card-carrier').textContent;
+      document.getElementById('dossier-location').textContent = document.getElementById('target-location').value || 'Unspecified';
+      document.getElementById('dossier-notes').textContent = document.getElementById('case-notes').value || 'None logged.';
+      
+      const count = document.getElementById('footprint-count-tag').textContent;
+      document.getElementById('dossier-footprints').textContent = `Total confirmed accounts: ${count}`;
+    }
+
+    function copyDossierText() {
+      const text = document.getElementById('printable-dossier').innerText;
+      navigator.clipboard.writeText(text);
+      alert('Dossier copied to clipboard.');
+    }
+
+    function loadScenario(type) {
+      if (type === 'nigerian-legit') {
+        document.getElementById('target-name').value = 'Adeyemi Okafor';
+        document.getElementById('target-phone').value = '+2348035550192';
+        document.getElementById('target-email').value = 'adeyemi.o@gmail.com';
+        document.getElementById('target-location').value = 'Port Harcourt, Rivers';
+        document.getElementById('case-notes').value = 'Local client verification inquiry.';
+      } else if (type === 'uk-mobile') {
+        document.getElementById('target-name').value = 'Arthur Pendelton';
+        document.getElementById('target-phone').value = '+447712345678';
+        document.getElementById('target-email').value = 'arthur.p@outlook.co.uk';
+        document.getElementById('target-location').value = 'London, UK';
+        document.getElementById('case-notes').value = 'UK-based corporate executive triage.';
+      } else {
+        document.getElementById('target-name').value = 'David Sterling';
+        document.getElementById('target-phone').value = '+18005550199';
+        document.getElementById('target-email').value = 'sterling.crypto@tempmail.com';
+        document.getElementById('target-location').value = 'Lagos, Nigeria';
+        document.getElementById('case-notes').value = 'Reported investment impersonation lead.';
+      }
+    }
+  </script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col font-sans">
 
@@ -20,7 +251,7 @@
     <div class="flex items-center space-x-3">
       <div class="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
       <span class="font-mono text-sm tracking-widest uppercase font-semibold text-emerald-400">AGENCY OSINT TRIAGE</span>
-      <span class="text-xs text-slate-500 border border-slate-700 px-2 py-0.5 rounded">v2.2 Cloud</span>
+      <span class="text-xs text-slate-500 border border-slate-700 px-2 py-0.5 rounded">v2.3 Cloud</span>
     </div>
     
     <div class="flex items-center gap-3">
@@ -106,7 +337,6 @@
 
       <!-- TAB 1: TELEMETRY & CARRIER -->
       <div id="tab-telemetry" class="space-y-4">
-        <!-- Metric Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
             <span class="text-[11px] font-mono text-slate-500 block uppercase">Detected Carrier</span>
@@ -127,7 +357,6 @@
           </div>
         </div>
 
-        <!-- Anomaly Cross-Reference Box -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-400 font-semibold mb-2">Cross-Reference Verification Signals</h3>
           <div id="signals-log" class="space-y-2 text-xs font-mono text-slate-400">
@@ -135,7 +364,6 @@
           </div>
         </div>
 
-        <!-- Live Messaging Links -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-400 font-semibold mb-3">Live Telecom & Direct Messaging Queries</h3>
           <div class="flex flex-wrap gap-2 text-xs">
@@ -158,14 +386,13 @@
           </div>
 
           <div id="holehe-results-box" class="space-y-2 max-h-80 overflow-y-auto">
-            <div class="text-xs font-mono text-slate-500 py-6 text-center">Run a scan with an email or generated candidate handle to see registered platforms.</div>
+            <div class="text-xs font-mono text-slate-500 py-6 text-center">Run a scan with an email to see registered platforms.</div>
           </div>
         </div>
       </div>
 
       <!-- TAB 3: OSINT PIVOTS & TOOLS -->
       <div id="tab-pivots" class="hidden space-y-4">
-        <!-- Corporate & Official Registry Pivots -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Corporate & Public Registries</h3>
           <p class="text-xs text-slate-400 mb-3">Cross-reference director profiles, corporate filings, and registered entities:</p>
@@ -179,7 +406,6 @@
           </div>
         </div>
 
-        <!-- Visual & Facial Recognition Launchers -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Visual & Facial Recognition Launchers</h3>
           <p class="text-xs text-slate-400 mb-3">Pivot avatar images or suspect portraits into public facial index networks:</p>
@@ -192,7 +418,6 @@
           </div>
         </div>
 
-        <!-- Sherlock / WhatsMyName Profile Direct Links -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Sherlock / WhatsMyName Profile Direct Links</h3>
           <div class="flex gap-2 mb-3">
@@ -202,9 +427,7 @@
               Build Links
             </button>
           </div>
-          <div id="social-links-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
-            <!-- Dynamic profile links appear here -->
-          </div>
+          <div id="social-links-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono"></div>
         </div>
       </div>
 
@@ -257,117 +480,5 @@
 
     </section>
   </main>
-
-  <!-- Script: Client-Side Logic & Render API Integration -->
-  <script>
-    // Tab Switching
-    function switchTab(name) {
-      ['telemetry', 'footprints', 'pivots', 'dossier'].forEach(tab => {
-        document.getElementById(`tab-${tab}`).classList.add('hidden');
-        const btn = document.getElementById(`tab-btn-${tab}`);
-        btn.classList.remove('border-emerald-500', 'text-emerald-400');
-        btn.classList.add('border-transparent', 'text-slate-400');
-      });
-      document.getElementById(`tab-${name}`).classList.remove('hidden');
-      const activeBtn = document.getElementById(`tab-btn-${name}`);
-      activeBtn.classList.remove('border-transparent', 'text-slate-400');
-      activeBtn.classList.add('border-emerald-500', 'text-emerald-400');
-    }
-
-    // Ping the Render Backend
-    async function pingCloudBackend() {
-      const baseUrl = document.getElementById('api-url-input').value.replace(/\/+$/, '');
-      const statusLabel = document.getElementById('api-ping-status');
-      statusLabel.textContent = 'Pinging...';
-      statusLabel.className = 'text-xs font-mono text-amber-400';
-
-      try {
-        const res = await fetch(`${baseUrl}/`, { method: 'GET' });
-        if (res.ok) {
-          const data = await res.json();
-          statusLabel.textContent = `Online (${data.service})`;
-          statusLabel.className = 'text-xs font-mono text-emerald-400';
-        } else {
-          statusLabel.textContent = `Error ${res.status}`;
-          statusLabel.className = 'text-xs font-mono text-rose-400';
-        }
-      } catch (err) {
-        statusLabel.textContent = 'Cold Start / Offline';
-        statusLabel.className = 'text-xs font-mono text-rose-400';
-      }
-    }
-
-    // Main Scan Trigger
-    async function executeFullTelemetryScan() {
-      const btn = document.getElementById('btn-run-scan');
-      const baseUrl = document.getElementById('api-url-input').value.replace(/\/+$/, '');
-      const phone = document.getElementById('target-phone').value.trim();
-      const email = document.getElementById('target-email').value.trim();
-      const location = document.getElementById('target-location').value.trim();
-
-      if (!phone) {
-        alert('Please enter a target phone number.');
-        return;
-      }
-
-      btn.disabled = true;
-      btn.innerHTML = `<span class="animate-pulse">QUERYING CLOUD BACKEND...</span>`;
-
-      // 1. Telecom & Carrier API Query
-      try {
-        const phoneRes = await fetch(`${baseUrl}/api/lookup/phone?phone=${encodeURIComponent(phone)}`);
-        if (phoneRes.ok) {
-          const phoneData = await phoneRes.json();
-          renderTelemetry(phoneData, location);
-        }
-      } catch (e) {
-        console.error("Phone lookup failed:", e);
-      }
-
-      // 2. Holehe Account Scan API Query
-      if (email) {
-        try {
-          const emailRes = await fetch(`${baseUrl}/api/scan/email?email=${encodeURIComponent(email)}`);
-          if (emailRes.ok) {
-            const emailData = await emailRes.json();
-            renderHoleheResults(emailData);
-          }
-        } catch (e) {
-          console.error("Email scan failed:", e);
-        }
-      }
-
-      // Update deep-links
-      updateMessagingLinks(phone);
-      updateDossier();
-
-      btn.disabled = false;
-      btn.textContent = 'RUN CLOUD TELEMETRY SCAN';
-    }
-
-    function renderTelemetry(data, claimedLoc) {
-      document.getElementById('card-carrier').textContent = data.carrier;
-      document.getElementById('card-region').textContent = `Region: ${data.region}`;
-      document.getElementById('card-linetype').textContent = data.line_type ? data.line_type.toUpperCase() : 'UNKNOWN';
-      
-      const voipCard = document.getElementById('card-voip-flag');
-      const riskCard = document.getElementById('card-risk');
-      const riskDesc = document.getElementById('card-risk-desc');
-      const signalsLog = document.getElementById('signals-log');
-      
-      let risk = 10;
-      let logs = [];
-
-      if (data.is_voip) {
-        voipCard.textContent = 'WARNING: VIRTUAL VOIP DETECTED';
-        voipCard.className = 'text-[10px] text-rose-400 font-mono font-bold';
-        risk += 50;
-        logs.push(`<div class="p-2 bg-rose-950/40 border border-rose-900 rounded text-rose-300">🚨 HIGH RISK: Virtual / VoIP routing identified (${data.carrier}). Frequently correlated with burner profiles.</div>`);
-      } else {
-        voipCard.textContent = data.line_type === 'landline' ? 'Geographic Landline' : 'Physical Cellular Exchange';
-        voipCard.className = 'text-[10px] text-emerald-400 font-mono';
-        logs.push(`<div class="p-2 bg-emerald-950/40 border border-emerald-900 rounded text-emerald-300">✓ Standard routing confirmed via ${data.carrier}.</div>`);
-      }
-
-      if (data.details) {
-        logs.push(`<div class="p-2 bg-amber-950/40 border border-amber-900 rounded text-amber-
+</body>
+</html>
