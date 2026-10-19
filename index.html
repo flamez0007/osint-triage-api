@@ -20,7 +20,7 @@
     <div class="flex items-center space-x-3">
       <div class="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
       <span class="font-mono text-sm tracking-widest uppercase font-semibold text-emerald-400">AGENCY OSINT TRIAGE</span>
-      <span class="text-xs text-slate-500 border border-slate-700 px-2 py-0.5 rounded">v2.1 Cloud</span>
+      <span class="text-xs text-slate-500 border border-slate-700 px-2 py-0.5 rounded">v2.2 Cloud</span>
     </div>
     
     <div class="flex items-center gap-3">
@@ -43,13 +43,13 @@
 
       <div>
         <label class="block text-xs font-mono text-slate-400 mb-1">FULL NAME / KNOWN ALIAS</label>
-        <input id="target-name" type="text" placeholder="e.g. John Doe or Samuel Vance" 
+        <input id="target-name" type="text" placeholder="e.g. John Doe or Arthur Pendelton" 
                class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
       </div>
 
       <div>
         <label class="block text-xs font-mono text-slate-400 mb-1">PHONE NUMBER (WITH COUNTRY CODE)</label>
-        <input id="target-phone" type="text" placeholder="+2348031234567 or +14155552671" 
+        <input id="target-phone" type="text" placeholder="+447712345678, +2348031234567, +14155552671" 
                class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
       </div>
 
@@ -61,7 +61,7 @@
 
       <div>
         <label class="block text-xs font-mono text-slate-400 mb-1">CLAIMED LOCATION</label>
-        <input id="target-location" type="text" placeholder="e.g. Port Harcourt, Nigeria" 
+        <input id="target-location" type="text" placeholder="e.g. London, UK or Port Harcourt, NG" 
                class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm focus:border-emerald-500 focus:outline-none font-mono">
       </div>
 
@@ -79,12 +79,15 @@
       <!-- Quick Preset Testing for Interns -->
       <div class="border-t border-slate-800 pt-3">
         <span class="text-[11px] font-mono text-slate-500 block mb-2 uppercase">Quick Demo Scenarios:</span>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-2">
           <button onclick="loadScenario('nigerian-legit')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 p-1.5 rounded text-slate-300 text-left">
-            🇳🇬 NG Verified (MTN)
+            🇳🇬 NG (MTN)
+          </button>
+          <button onclick="loadScenario('uk-mobile')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 p-1.5 rounded text-sky-300 text-left">
+            🇬🇧 UK (Vodafone)
           </button>
           <button onclick="loadScenario('us-burner')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 p-1.5 rounded text-amber-300 text-left">
-            🇺🇸 US VoIP Impersonator
+            🇺🇸 US (VoIP)
           </button>
         </div>
       </div>
@@ -162,6 +165,21 @@
 
       <!-- TAB 3: OSINT PIVOTS & TOOLS -->
       <div id="tab-pivots" class="hidden space-y-4">
+        <!-- Corporate & Official Registry Pivots -->
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Corporate & Public Registries</h3>
+          <p class="text-xs text-slate-400 mb-3">Cross-reference director profiles, corporate filings, and registered entities:</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <a href="https://find-and-update.company-information.service.gov.uk" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-sky-300 block transition">
+              🇬🇧 UK Companies House (Director / Company Search)
+            </a>
+            <a href="https://search.cac.gov.ng" target="_blank" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center text-xs font-mono text-emerald-300 block transition">
+              🇳🇬 Nigeria CAC (Corporate Affairs Search)
+            </a>
+          </div>
+        </div>
+
+        <!-- Visual & Facial Recognition Launchers -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Visual & Facial Recognition Launchers</h3>
           <p class="text-xs text-slate-400 mb-3">Pivot avatar images or suspect portraits into public facial index networks:</p>
@@ -174,6 +192,7 @@
           </div>
         </div>
 
+        <!-- Sherlock / WhatsMyName Profile Direct Links -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <h3 class="text-xs font-mono uppercase text-slate-300 font-semibold mb-2">Sherlock / WhatsMyName Profile Direct Links</h3>
           <div class="flex gap-2 mb-3">
@@ -284,7 +303,6 @@
       const baseUrl = document.getElementById('api-url-input').value.replace(/\/+$/, '');
       const phone = document.getElementById('target-phone').value.trim();
       const email = document.getElementById('target-email').value.trim();
-      const name = document.getElementById('target-name').value.trim();
       const location = document.getElementById('target-location').value.trim();
 
       if (!phone) {
@@ -330,7 +348,7 @@
     function renderTelemetry(data, claimedLoc) {
       document.getElementById('card-carrier').textContent = data.carrier;
       document.getElementById('card-region').textContent = `Region: ${data.region}`;
-      document.getElementById('card-linetype').textContent = data.line_type.toUpperCase();
+      document.getElementById('card-linetype').textContent = data.line_type ? data.line_type.toUpperCase() : 'UNKNOWN';
       
       const voipCard = document.getElementById('card-voip-flag');
       const riskCard = document.getElementById('card-risk');
@@ -344,102 +362,12 @@
         voipCard.textContent = 'WARNING: VIRTUAL VOIP DETECTED';
         voipCard.className = 'text-[10px] text-rose-400 font-mono font-bold';
         risk += 50;
-        logs.push(`<div class="p-2 bg-rose-950/40 border border-rose-900 rounded text-rose-300">🚨 HIGH RISK: Disposable / VoIP carrier detected (${data.carrier}). Common burner profile.</div>`);
+        logs.push(`<div class="p-2 bg-rose-950/40 border border-rose-900 rounded text-rose-300">🚨 HIGH RISK: Virtual / VoIP routing identified (${data.carrier}). Frequently correlated with burner profiles.</div>`);
       } else {
-        voipCard.textContent = 'Physical SIM Exchange';
+        voipCard.textContent = data.line_type === 'landline' ? 'Geographic Landline' : 'Physical Cellular Exchange';
         voipCard.className = 'text-[10px] text-emerald-400 font-mono';
-        logs.push(`<div class="p-2 bg-emerald-950/40 border border-emerald-900 rounded text-emerald-300">✓ Legitimate cellular routing on ${data.carrier}.</div>`);
+        logs.push(`<div class="p-2 bg-emerald-950/40 border border-emerald-900 rounded text-emerald-300">✓ Standard routing confirmed via ${data.carrier}.</div>`);
       }
 
-      if (claimedLoc) {
-        logs.push(`<div class="p-2 bg-slate-950 border border-slate-800 rounded">Claimed location recorded as: "${claimedLoc}". Cross-reference against carrier zone (${data.region}).</div>`);
-      }
-
-      riskCard.textContent = `${risk}% (${risk > 40 ? 'HIGH' : 'LOW'})`;
-      riskCard.className = `text-base font-bold font-mono mt-1 ${risk > 40 ? 'text-rose-400' : 'text-emerald-400'}`;
-      riskDesc.textContent = risk > 40 ? 'Anomalies identified' : 'Signals consistent';
-      signalsLog.innerHTML = logs.join('');
-    }
-
-    function renderHoleheResults(data) {
-      const box = document.getElementById('holehe-results-box');
-      const countTag = document.getElementById('footprint-count-tag');
-      
-      if (!data.registered_platforms || data.registered_platforms.length === 0) {
-        box.innerHTML = `<div class="text-xs font-mono text-slate-400 p-3 bg-slate-950 rounded">No platforms flagged or registered to ${data.target}.</div>`;
-        countTag.textContent = '0 Platforms';
-        return;
-      }
-
-      countTag.textContent = `${data.count} Platforms`;
-      box.innerHTML = data.registered_platforms.map(platform => `
-        <div class="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded text-xs font-mono">
-          <span class="text-slate-200 font-semibold">${platform}</span>
-          <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px]">ACTIVE / REGISTERED</span>
-        </div>
-      `).join('');
-    }
-
-    function updateMessagingLinks(phone) {
-      const digits = phone.replace(/\D/g, '');
-      document.getElementById('link-whatsapp').href = `https://wa.me/${digits}`;
-      document.getElementById('link-telegram').href = `https://t.me/+${digits}`;
-      document.getElementById('link-truecaller').href = `https://www.truecaller.com/search/none/${digits}`;
-    }
-
-    function refreshSocialLinks() {
-      const handle = document.getElementById('handle-search-input').value.trim();
-      if (!handle) return;
-      const grid = document.getElementById('social-links-grid');
-      const platforms = [
-        { name: 'Twitter / X', url: `https://x.com/${handle}` },
-        { name: 'Instagram', url: `https://instagram.com/${handle}` },
-        { name: 'GitHub', url: `https://github.com/${handle}` },
-        { name: 'TikTok', url: `https://tiktok.com/@${handle}` },
-        { name: 'LinkedIn', url: `https://linkedin.com/in/${handle}` },
-        { name: 'Reddit', url: `https://reddit.com/user/${handle}` }
-      ];
-
-      grid.innerHTML = platforms.map(p => `
-        <a href="${p.url}" target="_blank" class="p-2 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded text-center block text-slate-300 hover:text-emerald-400 transition">
-          ${p.name}
-        </a>
-      `).join('');
-    }
-
-    function updateDossier() {
-      document.getElementById('dossier-timestamp').textContent = new Date().toUTCString();
-      document.getElementById('dossier-subject').textContent = document.getElementById('target-name').value || 'Unknown Subject';
-      document.getElementById('dossier-phone').textContent = document.getElementById('target-phone').value || '--';
-      document.getElementById('dossier-carrier').textContent = document.getElementById('card-carrier').textContent;
-      document.getElementById('dossier-location').textContent = document.getElementById('target-location').value || 'Unspecified';
-      document.getElementById('dossier-notes').textContent = document.getElementById('case-notes').value || 'None logged.';
-      
-      const count = document.getElementById('footprint-count-tag').textContent;
-      document.getElementById('dossier-footprints').textContent = `Total confirmed accounts: ${count}`;
-    }
-
-    function copyDossierText() {
-      const text = document.getElementById('printable-dossier').innerText;
-      navigator.clipboard.writeText(text);
-      alert('Dossier copied to clipboard.');
-    }
-
-    function loadScenario(type) {
-      if (type === 'nigerian-legit') {
-        document.getElementById('target-name').value = 'Adeyemi Okafor';
-        document.getElementById('target-phone').value = '+2348035550192';
-        document.getElementById('target-email').value = 'adeyemi.o@gmail.com';
-        document.getElementById('target-location').value = 'Port Harcourt, Rivers';
-        document.getElementById('case-notes').value = 'Local client verification inquiry.';
-      } else {
-        document.getElementById('target-name').value = 'David Sterling';
-        document.getElementById('target-phone').value = '+18005550199';
-        document.getElementById('target-email').value = 'sterling.crypto@tempmail.com';
-        document.getElementById('target-location').value = 'Lagos, Nigeria';
-        document.getElementById('case-notes').value = 'Reported investment impersonation lead.';
-      }
-    }
-  </script>
-</body>
-</html>
+      if (data.details) {
+        logs.push(`<div class="p-2 bg-amber-950/40 border border-amber-900 rounded text-amber-
